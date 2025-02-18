@@ -1,0 +1,6 @@
+cpputest/cpputest_build
+build*/
+build*.sh
+clean*.sh
+Test*/
+clang*
