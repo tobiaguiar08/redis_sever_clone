@@ -11,14 +11,17 @@ char *parse_frame(const char *buffer)
     char *end;
     size_t result_len;
 
+    end = strstr(buffer + 1, delim);
+    if (!end)
+        goto err;
+
     switch (*buffer) {
         case '+':
-            end = strstr(buffer + 1, delim);
-            if (!end)
-                return empty;
+        case '-':
             break;
         default:
-            return empty;
+            goto err;
+            break;
     }
 
     result_len = strlen(buffer + 1) - strlen(end);
@@ -30,4 +33,7 @@ char *parse_frame(const char *buffer)
     result[result_len] = '\0';
 
     return result;
+
+err:
+    return empty;
 }
