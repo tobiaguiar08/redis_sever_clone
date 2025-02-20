@@ -18,6 +18,7 @@ add_executable(${CMAKE_PROJECT_NAME} main.cpp ${TEST_FILES})
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     "${CPPUTEST_HOME}/include"
     "${INCLUDE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE

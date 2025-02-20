@@ -4,3 +4,4 @@ build*.sh
 clean*.sh
 Test*/
 clang*
+compile_commands.json
