@@ -1,4 +1,3 @@
-
 #include <string.h>
 #include "test_protocol.hpp"
 
@@ -17,7 +16,9 @@ void test_parse_frame_str(const char *buffer, const void *expected_str, long uns
 {
     const char *str_res = (const char *)expected_str;
     result = parse_frame(buffer);
+
     STRCMP_EQUAL(str_res, (const char *)result->data);
+
     UNSIGNED_LONGS_EQUAL(expected_sz, result->size);
 }
 
@@ -49,7 +50,17 @@ const struct test_case_int TestCases_Int[INT_MAX_TESTS] = {
     {"IntegerWholeZero", ":0\r\n", &test_int0, strlen(":0\r\n")}
 };
 
-static struct test_case_itf TestCases[STR_MAX_TESTS + INT_MAX_TESTS];
+static const struct test_case_str TestCases_BulkStr[STR_MAX_TESTS] = {
+    {"BulkStringNull", "$-1\r\n", "NULL", 0},
+    {"BulkStringPartial", "$5\r\nHel", "", 0},
+    {"BulkStringPartial2", "$5\r\nHello\r", "", 0},
+    {"BulkStringWhole", "$5\r\nHello\r\n", "Hello", strlen("$5\r\nHello\r\n")},
+    {"BulkStringWholeEmpty", "$12\r\nHello, World\r\n", "Hello, World", strlen("$12\r\nHello, World\r\n")},
+    {"BulkStringWholePartial", "$12\r\nHello\r\nWorld\r\n", "Hello\r\nWorld", strlen("$12\r\nHello\r\nWorld\r\n")},
+    {"BulkStringEmpty", "$0\r\n\r\n", "", strlen("$0\r\n\r\n")}
+};
+
+static struct test_case_itf TestCases[STR_MAX_TESTS*2 + INT_MAX_TESTS];
 static int num_test_cases = 0;
 
 TEST_GROUP(TestGroupParseFrame)
@@ -74,6 +85,14 @@ TEST_GROUP(TestGroupParseFrame)
           TestCases[num_test_cases].input = TestCases_Int[i - STR_MAX_TESTS].input;
           TestCases[num_test_cases].expected_output = TestCases_Int[i - STR_MAX_TESTS].expected_out;
           TestCases[num_test_cases].expected_size = TestCases_Int[i - STR_MAX_TESTS].expected_size;
+      }
+
+      for (i = STR_MAX_TESTS + INT_MAX_TESTS; i < STR_MAX_TESTS + INT_MAX_TESTS + STR_MAX_TESTS; i++, num_test_cases++) {
+          TestCases[num_test_cases].name = TestCases_BulkStr[i - (STR_MAX_TESTS + INT_MAX_TESTS)].name;
+          TestCases[num_test_cases].test_case_fn = test_parse_frame_str;
+          TestCases[num_test_cases].input = TestCases_BulkStr[i - (STR_MAX_TESTS + INT_MAX_TESTS)].input;
+          TestCases[num_test_cases].expected_output = TestCases_BulkStr[i - (STR_MAX_TESTS + INT_MAX_TESTS)].expected_out;
+          TestCases[num_test_cases].expected_size = TestCases_BulkStr[i - (STR_MAX_TESTS + INT_MAX_TESTS)].expected_size;
       }
 	}
 
