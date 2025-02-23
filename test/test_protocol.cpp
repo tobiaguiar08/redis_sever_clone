@@ -1,4 +1,3 @@
-#include <string.h>
 #include "test_protocol.hpp"
 
 #include <CppUTest/UtestMacros.h>
@@ -7,17 +6,45 @@
 
 extern "C"
 {
+#include <string.h>
 #include "protocol.h"
 }
 
 static struct resp_protocol_hdlr *result;
+
+void test_parse_frame_array(const char *buffer, const void *expected_res, long unsigned int expected_sz)
+{
+    const char **expected_array = (const char **)expected_res;
+    const char *result_array;
+    int array_sz = 0;
+
+    if (buffer[0] == '*') {
+        array_sz = strtol(&buffer[1], NULL, 10);
+    }
+
+    result = parse_frame(buffer);
+
+    UNSIGNED_LONGS_EQUAL(expected_sz, result->size);
+
+    if (!result->data.p_data_arr) {
+        FAIL("NULL pointer result->data");
+    } else if (!expected_sz){
+        STRCMP_EQUAL("", (const char *)result->data.p_data_arr[0]);
+    } else {
+        for (int i = 0; i < array_sz; i++) {
+            result_array = (const char *)result->data.p_data_arr[i];
+            STRCMP_EQUAL(expected_array[i], result_array);
+        }
+
+    }
+}
 
 void test_parse_frame_str(const char *buffer, const void *expected_str, long unsigned int expected_sz)
 {
     const char *str_res = (const char *)expected_str;
     result = parse_frame(buffer);
 
-    STRCMP_EQUAL(str_res, (const char *)result->data);
+    STRCMP_EQUAL(str_res, (const char *)result->data.p_data);
 
     UNSIGNED_LONGS_EQUAL(expected_sz, result->size);
 }
@@ -26,7 +53,7 @@ void test_parse_frame_int(const char *buffer, const void *expected_res, long uns
 {
     int result_int = *(int *)expected_res;
     result = parse_frame(buffer);
-    UNSIGNED_LONGS_EQUAL(result_int, *(int *)result->data);
+    UNSIGNED_LONGS_EQUAL(result_int, *(int *)result->data.p_data);
     UNSIGNED_LONGS_EQUAL(expected_sz, result->size);
 }
 
@@ -51,7 +78,7 @@ const struct test_case_int TestCases_Int[INT_MAX_TESTS] = {
 };
 
 static const struct test_case_str TestCases_BulkStr[STR_MAX_TESTS] = {
-    {"BulkStringNull", "$-1\r\n", "NULL", 0},
+    {"BulkStringNull", "$-1\r\n", "NULL", strlen("$-1\r\n")},
     {"BulkStringPartial", "$5\r\nHel", "", 0},
     {"BulkStringPartial2", "$5\r\nHello\r", "", 0},
     {"BulkStringWhole", "$5\r\nHello\r\n", "Hello", strlen("$5\r\nHello\r\n")},
@@ -60,7 +87,21 @@ static const struct test_case_str TestCases_BulkStr[STR_MAX_TESTS] = {
     {"BulkStringEmpty", "$0\r\n\r\n", "", strlen("$0\r\n\r\n")}
 };
 
-static struct test_case_itf TestCases[STR_MAX_TESTS*2 + INT_MAX_TESTS];
+static const char *TestCaseArray1[1] = {""};
+static const char *TestCaseArray2[2] = {"Hello", "World"};
+static const char *TestCaseArray3[1] = {"SingleString"};
+static const char *TestCaseArray4[1] = {""};
+static const char *TestCaseArray5[2] = {"NULL", "Hello"};
+
+static const struct test_case_array TestCases_ArrayStr[ARRAY_STR_MAX_TESTS] = {
+    {"ArrayStringPartial", "*2\r\n$5\r\nhello\r\n$5\r\n", &TestCaseArray1[0], 0},
+    {"ArrayStringWhole", "*2\r\n$5\r\nHello\r\n$5\r\nWorld\r\n", &TestCaseArray2[0], strlen("*2\r\n$5\r\nHello\r\n$5\r\nWorld\r\n")},
+    {"ArrayStringSingleElement", "*1\r\n$12\r\nSingleString\r\n", &TestCaseArray3[0], strlen("*1\r\n$11\r\nSingleString\r\n")},
+    {"ArrayStringEmpty", "*0\r\n", &TestCaseArray4[0], strlen("*0\r\n")},
+    {"ArrayStringWithNullElement", "*2\r\n$-1\r\n$5\r\nHello\r\n", &TestCaseArray5[0], strlen("*2\r\n$-1\r\n$5\r\nHello\r\n")}
+};
+
+static struct test_case_itf TestCases[STR_MAX_TESTS*2 + INT_MAX_TESTS + ARRAY_STR_MAX_TESTS];
 static int num_test_cases = 0;
 
 TEST_GROUP(TestGroupParseFrame)
@@ -87,12 +128,20 @@ TEST_GROUP(TestGroupParseFrame)
           TestCases[num_test_cases].expected_size = TestCases_Int[i - STR_MAX_TESTS].expected_size;
       }
 
-      for (i = STR_MAX_TESTS + INT_MAX_TESTS; i < STR_MAX_TESTS + INT_MAX_TESTS + STR_MAX_TESTS; i++, num_test_cases++) {
+      for (i = STR_MAX_TESTS + INT_MAX_TESTS; i < STR_MAX_TESTS*2 + INT_MAX_TESTS; i++, num_test_cases++) {
           TestCases[num_test_cases].name = TestCases_BulkStr[i - (STR_MAX_TESTS + INT_MAX_TESTS)].name;
           TestCases[num_test_cases].test_case_fn = test_parse_frame_str;
           TestCases[num_test_cases].input = TestCases_BulkStr[i - (STR_MAX_TESTS + INT_MAX_TESTS)].input;
           TestCases[num_test_cases].expected_output = TestCases_BulkStr[i - (STR_MAX_TESTS + INT_MAX_TESTS)].expected_out;
           TestCases[num_test_cases].expected_size = TestCases_BulkStr[i - (STR_MAX_TESTS + INT_MAX_TESTS)].expected_size;
+      }
+
+      for (i = STR_MAX_TESTS*2 + INT_MAX_TESTS; i < STR_MAX_TESTS*2 + INT_MAX_TESTS + ARRAY_STR_MAX_TESTS; i++, num_test_cases++) {
+          TestCases[num_test_cases].name = TestCases_ArrayStr[i - (STR_MAX_TESTS*2 + INT_MAX_TESTS)].name;
+          TestCases[num_test_cases].test_case_fn = test_parse_frame_array;
+          TestCases[num_test_cases].input = TestCases_ArrayStr[i - (STR_MAX_TESTS*2 + INT_MAX_TESTS)].input;
+          TestCases[num_test_cases].expected_output = TestCases_ArrayStr[i - (STR_MAX_TESTS*2 + INT_MAX_TESTS)].expected_out;
+          TestCases[num_test_cases].expected_size = TestCases_ArrayStr[i - (STR_MAX_TESTS*2 + INT_MAX_TESTS)].expected_size;
       }
 	}
 
