@@ -5,7 +5,7 @@ enable_language(C)
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 
-add_library(production_lib ${SRC_DIR}/protocol.c)
+add_library(production_lib ${SRC_DIR}/protocol.c ${SRC_DIR}/server.c)
 
 set(CMAKE_C_STANDARD 99)
 

@@ -11,6 +11,7 @@ set(CMAKE_CXX_FLAGS "-include ${CPPUTEST_HOME}/include/CppUTest/MemoryLeakDetect
 
 set(TEST_FILES
         test_protocol.cpp
+        test_server.cpp
 )
 
 add_executable(${CMAKE_PROJECT_NAME} main.cpp ${TEST_FILES})
