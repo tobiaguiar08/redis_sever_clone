@@ -5,6 +5,61 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+struct resp_protocol_hdlr *create_protocol_handler() {
+    struct resp_protocol_hdlr *hdlr = (struct resp_protocol_hdlr *)malloc(sizeof(struct resp_protocol_hdlr));
+    if (!hdlr)
+        return NULL;
+
+    memset(hdlr, 0, sizeof(struct resp_protocol_hdlr));
+
+    return hdlr;
+}
+
+static void free_array_str(void **array, long int size)
+{
+    if (array) {
+        for (long int i = 0; i < size; i++) {
+            if (array[i])
+                free(array[i]);
+        }
+
+        free(array);
+    }
+}
+
+void destroy_protocol_handler_data(struct resp_protocol_hdlr *hdlr)
+{
+    if (!hdlr)
+        return;
+
+    if (hdlr->type == '*' && hdlr->data.p_data_arr) {
+        int array_size = 0;
+        if (hdlr->data.p_data_arr[0]) {
+            const char *buf = (const char *)hdlr->data.p_data_arr[0];
+            array_size = strtol(buf + 1, NULL, 10);
+        }
+
+        if (array_size <= 0)
+            free_array_str(hdlr->data.p_data_arr, 1);
+        else
+            free_array_str(hdlr->data.p_data_arr, array_size);
+
+        hdlr->data.p_data_arr = NULL;
+    } else {
+        if (hdlr->data.p_data) {
+            free(hdlr->data.p_data);
+            hdlr->data.p_data = NULL;
+        }
+    }
+}
+
+void destroy_protocol_handler(struct resp_protocol_hdlr *hdlr) {
+    destroy_protocol_handler_data(hdlr);
+
+    free(hdlr);
+    hdlr = NULL;
+}
+
 static bool is_digit(const char digit)
 {
     return ((digit >= '0') && (digit <= '9')) ? true : false;
@@ -24,7 +79,14 @@ static void *_parse_int(const char *buffer, long int *size)
     }
 
     result = malloc(sizeof(int));
+    if (!result) {
+        result = NULL;
+        *size = 0;
+        goto out;
+    } 
+
     p_int_result = (int *)result;
+    *p_int_result = 0;
     while (is_digit(*p_buf)) {
         *p_int_result = (*p_int_result * 10) + (*p_buf - '0');
         p_buf++;
@@ -55,6 +117,7 @@ static char *_parse_strings(const char *buffer, long int *tot_size, long int del
         goto out;
     }
 
+    memset(str_result, 0, size + 1);
     memcpy(str_result, buffer + 1, size);
     str_result[size] = '\0';
 
@@ -96,7 +159,6 @@ static char *_parse_bulk_str(const char *buf, long int *count, long int *len)
 
         const char *end = buf + total_jump;
         if ((strncmp(end, delim, strlen(delim)) || !(strstr(end, delim)))) {
-            printf("invalid bulk\n");
             str_result = strdup("");
             if (!str_result)
                 str_result = NULL;
@@ -116,24 +178,13 @@ static char *_parse_bulk_str(const char *buf, long int *count, long int *len)
             goto out;
         }
 
+        memset(str_result, 0, *count + 1);
         memcpy(str_result, buf + fixed_offset + variable_offset, *count);
         str_result[*count] = '\0';
     }
 
 out:
     return str_result;
-}
-
-static void free_array_str(void **array, long int size)
-{
-    if (array) {
-        for (long int i = 0; i < size; i++) {
-            if (array[i])
-                free(array[i]);
-        }
-
-        free(array);
-    }
 }
 
 static void create_empty_str(void **array_str)
@@ -215,12 +266,6 @@ static void **_parse_array_str(const char *buffer, long int *len)
                         goto out;
                     }
 
-                    if ((pos_next + 2) == NULL) {
-                        printf("test\n");
-                        __parse_array_fail(parsed_array, i, len);
-                        goto out;
-                    }
-
                     if (bulk_size < 0) {
                         pos_now = pos_next + 2;
                     } else
@@ -240,68 +285,55 @@ out:
     return parsed_array;
 }
 
-struct resp_protocol_hdlr *parse_frame(const char *buffer)
+void parse_frame(const char *buffer, struct resp_protocol_hdlr *hdlr)
 {
     const char *delim = "\r\n";
     char *str_result = NULL;
-    struct resp_protocol_hdlr *result = NULL;
     char *end;
     long int result_len;
     long int bulk_count = 0;
 
-    result = (struct resp_protocol_hdlr *)malloc(sizeof(struct resp_protocol_hdlr));
-    if (!result) {
-        result = NULL;
-        goto err_mem;
-    }
+    if (!hdlr)
+        return;
 
-    result->size = 0;
-    result->type = 0;
-
-    result->type = *buffer;
-    switch (result->type) {
+    hdlr->type = *buffer;
+    switch (hdlr->type) {
         case '+':
         case '-':
-            result->data.p_data = (void *)_parse_strings(buffer, &result_len, strlen(delim));
-            if (!result->data.p_data) {
-                result->data.p_data = NULL;
-                goto err_mem;
+            hdlr->data.p_data = (void *)_parse_strings(buffer, &result_len, strlen(delim));
+            if (!hdlr->data.p_data) {
+                hdlr->data.p_data = NULL;
+                return;
             }
 
             break;
         case ':':
-            result->data.p_data = (void *)_parse_int(buffer, &result_len);
-            if (!result->data.p_data) {
-                result->data.p_data = NULL;
-                goto err_mem;
+            hdlr->data.p_data = (void *)_parse_int(buffer, &result_len);
+            if (!hdlr->data.p_data) {
+                hdlr->data.p_data = NULL;
+                return;
             }
 
             break;
         case '$':
-            result->data.p_data = (void *)_parse_bulk_str(buffer, &bulk_count, &result_len);
-            if (!result->data.p_data) {
-                result->data.p_data = NULL;
-                goto err_mem;
+            hdlr->data.p_data = (void *)_parse_bulk_str(buffer, &bulk_count, &result_len);
+            if (!hdlr->data.p_data) {
+                hdlr->data.p_data = NULL;
+                return;
             }
 
             break;
         case '*':
-            result->data.p_data_arr = (void **)_parse_array_str(buffer, &result_len);
-            if (!result->data.p_data_arr) {
-                result->data.p_data_arr = NULL;
-                goto err_mem;
+            hdlr->data.p_data_arr = (void **)_parse_array_str(buffer, &result_len);
+            if (!hdlr->data.p_data_arr) {
+                hdlr->data.p_data_arr = NULL;
+                return;
             }
+
             break;
         default:
-            goto err_parse;
-            break;
+            return;
     }
-    
-    result->size = result_len;
-    return result;
 
-err_data:
-err_parse:
-err_mem:
-    return result;
+    hdlr->size = result_len;
 }

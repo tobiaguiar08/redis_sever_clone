@@ -10,6 +10,10 @@ struct resp_protocol_hdlr {
     } data;
 };
 
-struct resp_protocol_hdlr *parse_frame(const char *buffer);
+struct resp_protocol_hdlr *create_protocol_handler(void);
+void destroy_protocol_handler(struct resp_protocol_hdlr *hdlr);
+void destroy_protocol_handler_data(struct resp_protocol_hdlr *hdlr);
+
+void parse_frame(const char *buffer, struct resp_protocol_hdlr *hdlr);
 
 #endif // !_PROTOCOL_H

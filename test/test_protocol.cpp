@@ -1,7 +1,6 @@
 #include "test_protocol.hpp"
 
 #include <CppUTest/UtestMacros.h>
-#include <cstdio>
 #include "CppUTest/TestHarness.h"
 
 extern "C"
@@ -22,12 +21,12 @@ void test_parse_frame_array(const char *buffer, const void *expected_res, long u
         array_sz = strtol(&buffer[1], NULL, 10);
     }
 
-    result = parse_frame(buffer);
+    parse_frame(buffer, result);
 
     UNSIGNED_LONGS_EQUAL(expected_sz, result->size);
 
     if (!result->data.p_data_arr) {
-        FAIL("NULL pointer result->data");
+        FAIL("NULL pointer result->data.p_data_arr");
     } else if (!expected_sz){
         STRCMP_EQUAL("", (const char *)result->data.p_data_arr[0]);
     } else {
@@ -42,7 +41,7 @@ void test_parse_frame_array(const char *buffer, const void *expected_res, long u
 void test_parse_frame_str(const char *buffer, const void *expected_str, long unsigned int expected_sz)
 {
     const char *str_res = (const char *)expected_str;
-    result = parse_frame(buffer);
+    parse_frame(buffer, result);
 
     STRCMP_EQUAL(str_res, (const char *)result->data.p_data);
 
@@ -52,7 +51,7 @@ void test_parse_frame_str(const char *buffer, const void *expected_str, long uns
 void test_parse_frame_int(const char *buffer, const void *expected_res, long unsigned int expected_sz)
 {
     int result_int = *(int *)expected_res;
-    result = parse_frame(buffer);
+    parse_frame(buffer, result);
     UNSIGNED_LONGS_EQUAL(result_int, *(int *)result->data.p_data);
     UNSIGNED_LONGS_EQUAL(expected_sz, result->size);
 }
@@ -110,7 +109,10 @@ TEST_GROUP(TestGroupParseFrame)
   void setup()
 	{
       int i;
-      result = NULL;
+
+      result = create_protocol_handler();
+      if (!result)
+          FAIL("Protocol handler allocation failed");
 
       for (i = 0; i < STR_MAX_TESTS; i++, num_test_cases++) {
           TestCases[num_test_cases].name = TestCases_Str[i].name;
@@ -147,6 +149,7 @@ TEST_GROUP(TestGroupParseFrame)
 
 	void teardown()
 	{
+      destroy_protocol_handler(result);
 	}
 
 };
@@ -158,6 +161,7 @@ TEST(TestGroupParseFrame, TestParseFrameRunner)
         const struct test_case_itf *tc = &TestCases[i];
         printf("Running test %s...\n",tc->name);
         tc->test_case_fn(tc->input, tc->expected_output, tc->expected_size);
+        destroy_protocol_handler_data(result);
     }
 }
 
