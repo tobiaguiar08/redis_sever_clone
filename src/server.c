@@ -1,4 +1,5 @@
 #include "server.h"
+#include "protocol.h"
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -27,6 +28,9 @@ int start_server(unsigned int port)
     int opt = 1;
     errno = 0;
     char buffer[64];
+    char response[16];
+    size_t bytes;
+    struct resp_protocol_hdlr *resp_hdlr;
 
     signal(SIGINT, handle_sigint);
 
@@ -54,29 +58,45 @@ int start_server(unsigned int port)
 
     printf("\nServer listening on port %d...\n", port);
 
-    new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
-    if (new_socket < 0) {
-        perror("Accept failed");
-        return -1;
+    resp_hdlr = create_protocol_handler();
+    if (!resp_hdlr) {
+        printf("error in protocol handler creation\n");
+        goto out;
     }
 
     while (server_running) {
-        char buffer[1024] = {0};
-        ssize_t bytes_read = read(new_socket, buffer, sizeof(buffer));
-        if (bytes_read > 0) {
+        new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+        if (new_socket < 0) {
+            perror("Accept failed");
+            continue;
+        }
+
+        printf("New client connected\n");
+
+        while (server_running) {
+            ssize_t bytes_read = read(new_socket, buffer, sizeof(buffer));
+            if (bytes_read <= 0) {
+                printf("Client disconnected\n");
+                break;
+            }
+
             buffer[bytes_read] = '\0';
 
-            if (strcmp(buffer, "PING") == 0) {
-                send(new_socket, "PONG", 4, 0);
-            } else if (strncmp(buffer, "ECHO ", 5) == 0) {
-                send(new_socket, buffer + 5, strlen(buffer) - 5, 0);
-            } else {
-                send(new_socket, "UNKNOWN", 7, 0);
+            parse_frame(buffer, resp_hdlr);
+            if (resp_hdlr->type == '+' || resp_hdlr->type == '-') {
+                bytes = snprintf(response, sizeof(response), "%s", (const char *)resp_hdlr->data.p_data);
+            } else if (resp_hdlr->type == ':') {
+                bytes = snprintf(response, sizeof(response), "%d", *(int *)resp_hdlr->data.p_data);
             }
+            send(new_socket, response, bytes, 0);
+            destroy_protocol_handler_data(resp_hdlr);
         }
+
+        close(new_socket);
     }
 
-    close(new_socket);
-
-    return server_fd;
+    destroy_protocol_handler(resp_hdlr);
+out:
+    close(server_fd);
+    return 0;
 }

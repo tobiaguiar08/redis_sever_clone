@@ -3,10 +3,10 @@
 
 struct test_case_itf {
     const char *name;
-    void (*test_case_fn)(const char *input, const void *expected_out, long unsigned int expected_size);
-    const char *input;
+    void (*test_case_fn)(const void *input, const void *expected_out, long unsigned int size);
+    const void *input;
     const void *expected_output;
-    long unsigned int expected_size;
+    long unsigned int size;
 };
 
 #define STR_MAX_TESTS 7
