@@ -10,3 +10,9 @@ add_library(production_lib ${SRC_DIR}/protocol.c ${SRC_DIR}/server.c)
 set(CMAKE_C_STANDARD 99)
 
 target_include_directories(production_lib PRIVATE ${INCLUDE_DIR})
+
+add_executable(redis_exec ${SRC_DIR}/main.c)
+
+target_include_directories(redis_exec PRIVATE ${INCLUDE_DIR})
+
+target_link_libraries(redis_exec PRIVATE production_lib)

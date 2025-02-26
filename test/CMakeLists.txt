@@ -14,19 +14,19 @@ set(TEST_FILES
         test_server.cpp
 )
 
-add_executable(${CMAKE_PROJECT_NAME} main.cpp ${TEST_FILES})
+add_executable(redis_server_tests main.cpp ${TEST_FILES})
 
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+target_include_directories(redis_server_tests PRIVATE
     "${CPPUTEST_HOME}/include"
     "${INCLUDE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
-target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+target_compile_options(redis_server_tests PRIVATE
     -Wall -Wextra
 )
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
+target_link_libraries(redis_server_tests PRIVATE
     CppUTest::CppUTest
     CppUTest::CppUTestExt
     production_lib
