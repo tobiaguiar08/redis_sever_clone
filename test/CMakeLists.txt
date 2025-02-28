@@ -12,6 +12,7 @@ set(CMAKE_CXX_FLAGS "-include ${CPPUTEST_HOME}/include/CppUTest/MemoryLeakDetect
 set(TEST_FILES
         test_protocol.cpp
         test_server.cpp
+        test_command_hdlr.cpp
 )
 
 add_executable(redis_server_tests main.cpp ${TEST_FILES})
