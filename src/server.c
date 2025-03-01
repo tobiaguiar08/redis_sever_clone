@@ -84,9 +84,9 @@ int start_server(unsigned int port)
 
             parse_frame(buffer, resp_hdlr);
             if (resp_hdlr->type == '+' || resp_hdlr->type == '-') {
-                bytes = snprintf(response, sizeof(response), "%s", (const char *)resp_hdlr->data.p_data);
+                bytes = snprintf(response, sizeof(response), "%s", resp_hdlr->buf_arr[0].data);
             } else if (resp_hdlr->type == ':') {
-                bytes = snprintf(response, sizeof(response), "%d", *(int *)resp_hdlr->data.p_data);
+                bytes = snprintf(response, sizeof(response), "%d", *(int *)resp_hdlr->buf_arr[0].data);
             }
             send(new_socket, response, bytes, 0);
             destroy_protocol_handler_data(resp_hdlr);

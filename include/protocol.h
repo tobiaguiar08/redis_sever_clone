@@ -1,13 +1,17 @@
 #ifndef _PROTOCOL_H
 #define _PROTOCOL_H
 
+struct str_type_buffer {
+    char *data;
+    int length;
+    int raw_length;
+};
+
 struct resp_protocol_hdlr {
     char type;
-    long unsigned int size;
-    union {
-        void *p_data;
-        void **p_data_arr;
-    } data;
+    int arr_size;
+    int arr_raw_length;
+    struct str_type_buffer *buf_arr;
 };
 
 struct resp_protocol_hdlr *create_protocol_handler(void);
