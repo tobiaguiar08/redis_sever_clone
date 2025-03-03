@@ -49,19 +49,19 @@ TEST(TestGroupServer, TestServerHandlesMultipleFrames) {
 
     CHECK(connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == 0);
 
-    const char *message1 = "+OK\r\n";
+    const char *message1 = "*1\r\n$4\r\nPING\r\n";
     send(client_socket, message1, strlen(message1), 0);
 
     char buffer1[1024] = {0};
     ssize_t bytes_received1 = recv(client_socket, buffer1, sizeof(buffer1), 0);
     CHECK(bytes_received1 > 0);
-    STRNCMP_EQUAL("OK", buffer1, 2);
+    STRNCMP_EQUAL("+PONG\r\n", buffer1, strlen("+PONG\r\n"));
 
-    const char *message2 = "-ERR\r\n";
+    const char *message2 = "*2\r\n$4\r\nECHO\r\n$5\r\nHELLO\r\n";
     send(client_socket, message2, strlen(message2), 0);
 
     char buffer2[1024] = {0};
     ssize_t bytes_received2 = recv(client_socket, buffer2, sizeof(buffer2), 0);
     CHECK(bytes_received2 > 0);
-    STRNCMP_EQUAL("ERR", buffer2, 3);
+    STRNCMP_EQUAL("+HELLO\r\n", buffer2, strlen("+HELLO\r\n"));
 }

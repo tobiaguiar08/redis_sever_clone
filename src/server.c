@@ -1,4 +1,5 @@
 #include "server.h"
+#include "cmd_hdlr.h"
 #include "protocol.h"
 
 #include <sys/socket.h>
@@ -12,6 +13,8 @@
 
 #include <stdio.h>
 
+#define MAX_ARGS 3
+
 static int server_running = 1;
 
 void handle_sigint(int sig) {
@@ -19,6 +22,27 @@ void handle_sigint(int sig) {
     server_running = 0;
 }
 
+static int parsed_hdlr_to_cmd_format(struct resp_protocol_hdlr *hdlr, int *argc, char **argv)
+{
+    int i;
+
+    if (!hdlr || !argc || !argv)
+        return -1;
+
+    if (!hdlr->buf_arr || !hdlr->arr_size)
+        return -1;
+
+    *argc = hdlr->arr_size;
+
+    for (i = 0; i < *argc; i++) {
+        if (!hdlr->buf_arr[i].data)
+            return -1;
+
+        argv[i] = hdlr->buf_arr[i].data;
+    }
+
+    return 0;
+}
 
 int start_server(unsigned int port)
 {
@@ -28,8 +52,10 @@ int start_server(unsigned int port)
     int opt = 1;
     errno = 0;
     char buffer[64];
-    char response[16];
+    char response[64];
     size_t bytes;
+    int tmp_argc;
+    char *tmp_argv[MAX_ARGS];
     struct resp_protocol_hdlr *resp_hdlr;
 
     signal(SIGINT, handle_sigint);
@@ -83,12 +109,25 @@ int start_server(unsigned int port)
             buffer[bytes_read] = '\0';
 
             parse_frame(buffer, resp_hdlr);
-            if (resp_hdlr->type == '+' || resp_hdlr->type == '-') {
-                bytes = snprintf(response, sizeof(response), "%s", resp_hdlr->buf_arr[0].data);
-            } else if (resp_hdlr->type == ':') {
-                bytes = snprintf(response, sizeof(response), "%d", *(int *)resp_hdlr->buf_arr[0].data);
+            if (!parsed_hdlr_to_cmd_format(resp_hdlr, &tmp_argc, tmp_argv)) {
+                struct cmd_hdlr *cmd;
+                if (!exec_cmd((void **)&cmd, tmp_argc, (const char **)tmp_argv)) {
+                    if (strcmp(cmd->name, "ECHO")) {
+                        bytes = snprintf(response, 64, "+%s\r\n", cmd->response_str);
+                    } else if (strcmp(cmd->name, "PING")) {
+                        bytes = snprintf(response, 64, "+%s\r\n", cmd->response_str);
+                    } else {
+                        bytes = snprintf(response, 64, "-ERR in parsed frame format\r\n");
+                    }
+                } else {
+                    bytes = snprintf(response, 64, "-ERR %s\r\n", cmd->response_str);
+                }
+            } else {
+                bytes = snprintf(response, 64, "-ERR in parsed frame format\r\n");
             }
+
             send(new_socket, response, bytes, 0);
+
             destroy_protocol_handler_data(resp_hdlr);
         }
 
