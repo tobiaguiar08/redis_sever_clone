@@ -53,7 +53,7 @@ int start_server(unsigned int port)
     errno = 0;
     char buffer[64];
     char response[64];
-    size_t bytes;
+    long int bytes;
     int tmp_argc;
     char *tmp_argv[MAX_ARGS];
     struct resp_protocol_hdlr *resp_hdlr;
@@ -100,6 +100,7 @@ int start_server(unsigned int port)
         printf("New client connected\n");
 
         while (server_running) {
+            memset(response, 0, sizeof(response));
             ssize_t bytes_read = read(new_socket, buffer, sizeof(buffer));
             if (bytes_read <= 0) {
                 printf("Client disconnected\n");
@@ -112,12 +113,9 @@ int start_server(unsigned int port)
             if (!parsed_hdlr_to_cmd_format(resp_hdlr, &tmp_argc, tmp_argv)) {
                 struct cmd_hdlr *cmd;
                 if (!exec_cmd((void **)&cmd, tmp_argc, (const char **)tmp_argv)) {
-                    if (strcmp(cmd->name, "ECHO")) {
-                        bytes = snprintf(response, 64, "+%s\r\n", cmd->response_str);
-                    } else if (strcmp(cmd->name, "PING")) {
-                        bytes = snprintf(response, 64, "+%s\r\n", cmd->response_str);
-                    } else {
-                        bytes = snprintf(response, 64, "-ERR in parsed frame format\r\n");
+                    bytes = encode_frame(response, sizeof(response), &cmd->resp);
+                    if (bytes < 0) {
+                        snprintf(response, sizeof(response), "-ERR encoding failed\r\n");
                     }
                 } else {
                     bytes = snprintf(response, 64, "-ERR %s\r\n", cmd->response_str);

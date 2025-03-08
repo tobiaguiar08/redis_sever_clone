@@ -1,5 +1,6 @@
 #include <CppUTest/UtestMacros.h>
 #include "CppUTest/TestHarness.h"
+#include "protocol.h"
 
 extern "C" {
 #include <string.h>
@@ -23,12 +24,15 @@ TEST(CommandHdlrs, EchoCommandIncorrectArgc)
     int res, test_argc, written;
 
     char expected_str[MAX_RESPONSE_SIZE];
+    struct resp_protocol_hdlr response_resp;
+    memset(&response_resp, 0, sizeof(response_resp));
 
     struct cmd_hdlr test_echo_cmd = {
         .name = "ECHO",
         .help_str = "ECHO <string_to_echo>",
         .cmd_cb = handle_echo_command,
         .response_str = {0},
+        .resp = response_resp,
         .ctx = &test_echo_cmd
     };
 
@@ -51,12 +55,15 @@ TEST(CommandHdlrs, EchoCommand)
     int res, test_argc, written;
 
     char expected_str[MAX_RESPONSE_SIZE];
+    struct resp_protocol_hdlr response_resp;
+    memset(&response_resp, 0, sizeof(response_resp));
 
     struct cmd_hdlr test_echo_cmd = {
         .name = "ECHO",
         .help_str = "ECHO <string_to_echo>",
         .cmd_cb = handle_echo_command,
         .response_str = {0},
+        .resp = response_resp,
         .ctx = &test_echo_cmd
     };
 
@@ -70,7 +77,9 @@ TEST(CommandHdlrs, EchoCommand)
 
     res = test_echo_cmd.cmd_cb(test_echo_cmd.ctx, test_argc, test_argv);
     CHECK(res == 0);
+    CHECK(test_echo_cmd.resp.buf_arr != NULL);
     STRNCMP_EQUAL(expected_str, test_echo_cmd.response_str, MAX_RESPONSE_SIZE);
+    STRNCMP_EQUAL(expected_str, (const char *)test_echo_cmd.resp.buf_arr[0].data, test_echo_cmd.resp.buf_arr[0].length);
 }
 
 TEST(CommandHdlrs, PingCommand)
@@ -79,12 +88,15 @@ TEST(CommandHdlrs, PingCommand)
     int res, test_argc, written;
 
     char expected_str[MAX_RESPONSE_SIZE];
+    struct resp_protocol_hdlr response_resp;
+    memset(&response_resp, 0, sizeof(response_resp));
 
     struct cmd_hdlr test_ping_cmd = {
         .name = "PING",
         .help_str = "PING",
         .cmd_cb = handle_ping_command,
         .response_str = {0},
+        .resp = response_resp,
         .ctx = &test_ping_cmd
     };
 
@@ -98,7 +110,9 @@ TEST(CommandHdlrs, PingCommand)
 
     res = test_ping_cmd.cmd_cb(test_ping_cmd.ctx, test_argc, test_argv);
     CHECK(res == 0);
+    CHECK(test_ping_cmd.resp.buf_arr != NULL);
     STRNCMP_EQUAL(expected_str, test_ping_cmd.response_str, MAX_RESPONSE_SIZE);
+    STRNCMP_EQUAL(expected_str, (const char *)test_ping_cmd.resp.buf_arr[0].data, test_ping_cmd.resp.buf_arr[0].length);
 }
 
 TEST(CommandHdlrs, TestFindCommand)

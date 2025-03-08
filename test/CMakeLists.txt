@@ -24,7 +24,7 @@ target_include_directories(redis_server_tests PRIVATE
 )
 
 target_compile_options(redis_server_tests PRIVATE
-    -Wall -Wextra
+    -g -Wall -Wextra
 )
 
 target_link_libraries(redis_server_tests PRIVATE

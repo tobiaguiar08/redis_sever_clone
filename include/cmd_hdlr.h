@@ -1,6 +1,7 @@
 #ifndef _CMD_HDLR_H
 #define _CMD_HDLR_H
 
+#include "protocol.h"
 #define MAX_CMDS 2
 
 #define MAX_NAME_LEN 10
@@ -14,6 +15,7 @@ struct cmd_hdlr {
   const char *help_str;
   handler_cb cmd_cb;
   char response_str[MAX_RESPONSE_SIZE];
+  struct resp_protocol_hdlr resp;
   void *ctx;
 };
 

@@ -18,30 +18,37 @@ struct resp_protocol_hdlr *create_protocol_handler() {
 
 void destroy_protocol_handler_data(struct resp_protocol_hdlr *hdlr)
 {
-    if (!hdlr)
+    if (!hdlr || !hdlr->buf_arr)
         return;
 
     if (hdlr->type == '*') {
-        if (hdlr->arr_size > 0 && hdlr->buf_arr) {
+        if (hdlr->arr_size > 0) {
             for (int i = 0; i < hdlr->arr_size; i++) {
                 if (hdlr->buf_arr[i].data) {
-                    free(hdlr->buf_arr[i].data);
-                    hdlr->buf_arr[i].data = NULL;
+                    if (hdlr->buf_arr[i].type != '*') {
+                        free(hdlr->buf_arr[i].data);
+                    } else {
+                        struct resp_protocol_hdlr *tmp = (struct resp_protocol_hdlr *)hdlr->buf_arr[i].data;
+                        destroy_protocol_handler(tmp);
+                    }
                 }
             }
 
-            free(hdlr->buf_arr);
-            hdlr->buf_arr = NULL;
-        }
-    } else {
-        if (hdlr->buf_arr) {
-            free(hdlr->buf_arr);
-            hdlr->buf_arr = NULL;
+        } else {
+            if (hdlr->buf_arr->data)
+                free(hdlr->buf_arr->data);
         }
     }
+
+    free(hdlr->buf_arr);
+
+    memset(hdlr, 0, sizeof(*hdlr));
 }
 
 void destroy_protocol_handler(struct resp_protocol_hdlr *hdlr) {
+    if (!hdlr)
+        return;
+
     destroy_protocol_handler_data(hdlr);
 
     free(hdlr);
@@ -59,6 +66,9 @@ static void __create_empty_str(struct resp_protocol_hdlr *hdlr)
     }
 
     hdlr->buf_arr[0].data = strdup("");
+    if (!hdlr->buf_arr[0].data)
+        free(hdlr->buf_arr);
+
     hdlr->buf_arr[0].raw_length = 0;
     hdlr->buf_arr[0].length = 0;
     hdlr->arr_raw_length = 0;
@@ -97,6 +107,7 @@ static void _parse_int(const char *buffer, struct resp_protocol_hdlr *hdlr)
 
     str_result->data = calloc(1, sizeof(int));
     if (!str_result->data) {
+        free(hdlr->buf_arr);
         str_result->data = NULL;
         str_result->raw_length = 0;
         str_result->length = 0;
@@ -124,11 +135,13 @@ static void _parse_int(const char *buffer, struct resp_protocol_hdlr *hdlr)
     str_result->length = (long int)(end - (buffer + 1));
     str_result->raw_length = str_result->length + 3;
     hdlr->arr_raw_length = str_result->raw_length;
+    str_result->type = hdlr->type;
 }
 
 static void _parse_strings(const char *buffer, struct resp_protocol_hdlr *hdlr)
 {
     struct str_type_buffer *str_result;
+    char *tmp;
 
     hdlr->arr_size = 1;
     hdlr->buf_arr = calloc(hdlr->arr_size, sizeof(struct str_type_buffer));
@@ -143,7 +156,7 @@ static void _parse_strings(const char *buffer, struct resp_protocol_hdlr *hdlr)
     }
 
     str_result->length = (long int)(end - (buffer + 1));
-    str_result->data = calloc(str_result->length + 1, sizeof(char));
+    str_result->data = calloc(1, sizeof(char)*(str_result->length + 1));
     if (!str_result->data) {
         str_result->data = NULL;
         str_result->raw_length = 0;
@@ -153,10 +166,12 @@ static void _parse_strings(const char *buffer, struct resp_protocol_hdlr *hdlr)
     }
 
     memcpy(str_result->data, buffer + 1, str_result->length);
-    str_result->data[str_result->length] = '\0';
+    tmp = (char *)str_result->data;
+    tmp[str_result->length] = '\0';
 
     str_result->raw_length = str_result->length + 3;
     hdlr->arr_raw_length = str_result->raw_length;
+    str_result->type = hdlr->type;
 }
 
 static long int __get_num_digits(const char *digits)
@@ -185,6 +200,7 @@ static void _parse_bulk_str(const char *buf, struct resp_protocol_hdlr *hdlr)
     const char*delim;
     long int buf_len;
     char *save_ptr;
+    char *tmp;
 
     hdlr->arr_size = 1;
     hdlr->buf_arr = calloc(hdlr->arr_size, sizeof(struct str_type_buffer));
@@ -220,7 +236,7 @@ static void _parse_bulk_str(const char *buf, struct resp_protocol_hdlr *hdlr)
 
         str_result->raw_length = (int)(end - buf) + strlen(delim);
 
-        str_result->data = calloc(str_result->length + 1, sizeof(char));
+        str_result->data = calloc(1, sizeof(char)*(str_result->length + 1));
         if (!str_result->data) {
             str_result->data = NULL;
             str_result->raw_length = 0;
@@ -230,10 +246,12 @@ static void _parse_bulk_str(const char *buf, struct resp_protocol_hdlr *hdlr)
         }
 
         memcpy(str_result->data, buf + fixed_offset + variable_offset, str_result->length);
-        str_result->data[str_result->length] = '\0';
+        tmp = (char *)str_result->data;
+        tmp[str_result->length] = '\0';
     }
 
     hdlr->arr_raw_length = str_result->raw_length;
+    str_result->type = hdlr->type;
 }
 
 static void _parse_array_str(const char *buffer, struct resp_protocol_hdlr *hdlr)
@@ -242,7 +260,6 @@ static void _parse_array_str(const char *buffer, struct resp_protocol_hdlr *hdlr
     long int bulk_size, i;
     const char *pos_next, *delim = "\r\n";
     char *end_size_ptr;
-    struct resp_protocol_hdlr subresult;
     
     array_size = strtol(buffer + 1, &end_size_ptr, 10);
     if (!valid_str(buffer, end_size_ptr)) {
@@ -258,9 +275,10 @@ static void _parse_array_str(const char *buffer, struct resp_protocol_hdlr *hdlr
             return;
         }
 
+        hdlr->buf_arr[0].type = '+';
         hdlr->buf_arr[0].data = array_size == 0 ? strdup("") : strdup("NULL");
         hdlr->buf_arr[0].raw_length = array_size == 0 ? strlen("*0\r\n") : strlen("*-1\r\n");
-        hdlr->buf_arr[0].length = -1;
+        hdlr->buf_arr[0].length = array_size;
         hdlr->arr_raw_length = hdlr->buf_arr[0].raw_length;
 
         return;
@@ -284,36 +302,41 @@ static void _parse_array_str(const char *buffer, struct resp_protocol_hdlr *hdlr
         long int len_now = 0;
         long int tot_len = (long unsigned int)(pos_now - buffer);
         for (i = 0; i < array_size; i++) {
-            memset(&subresult, 0, sizeof(subresult));
+            struct resp_protocol_hdlr *subresult = calloc(1, sizeof(struct resp_protocol_hdlr));
+
             pos_next = strstr(pos_now, delim);
-            if (!pos_next)
+            if (!pos_next) {
+                free(subresult);
                 break;
+            }
 
-            parse_frame(pos_now, &subresult);
-            if (!subresult.buf_arr || !subresult.buf_arr[0].raw_length || !subresult.buf_arr[0].data) {
+            parse_frame(pos_now, subresult);
+            if (!subresult->buf_arr || !subresult->buf_arr[0].raw_length || !subresult->buf_arr[0].data) {
+                free(subresult->buf_arr);
+                free(subresult);
                 __parse_fail(hdlr);
                 return;
             }
 
-            if((!subresult.buf_arr[0].raw_length && subresult.buf_arr[0].length >= 0) ||  !subresult.buf_arr[0].data) {
-                __parse_fail(hdlr);
-                return;
-            }
+            hdlr->buf_arr[i].type = subresult->type;
 
-            hdlr->type = subresult.type;
-            hdlr->buf_arr[i].length = subresult.buf_arr[0].length;
-            hdlr->buf_arr[i].raw_length = subresult.buf_arr[0].raw_length;
-            if (subresult.buf_arr[0].length >= 0) {
-                hdlr->buf_arr[i].data = calloc(1, sizeof(char) * subresult.buf_arr[0].length);
-                memcpy(hdlr->buf_arr[i].data, subresult.buf_arr[0].data, hdlr->buf_arr[i].length);
+            if (subresult->type != '*') {
+                hdlr->buf_arr[i] = subresult->buf_arr[0];
+                hdlr->buf_arr[i].data = subresult->buf_arr->data;
+                pos_now = pos_now + subresult->arr_raw_length;
+          
+                tot_len += subresult->arr_raw_length;
+                free(subresult->buf_arr);
+                free(subresult);
             } else {
-                hdlr->buf_arr[i].data = calloc(1, sizeof(char) * subresult.buf_arr[0].raw_length);
-                memcpy(hdlr->buf_arr[i].data, subresult.buf_arr[0].data, hdlr->buf_arr[i].raw_length);
+                hdlr->buf_arr[i].length = subresult->arr_size;
+                hdlr->buf_arr[i].raw_length = subresult->arr_raw_length;
+                hdlr->buf_arr[i].data = subresult;
+                pos_now = pos_now + subresult->arr_raw_length;
+          
+                tot_len += subresult->arr_raw_length;
             }
 
-            pos_now = pos_now + subresult.buf_arr[0].raw_length;             
-      
-            tot_len += subresult.buf_arr[0].raw_length;
         }
 
         hdlr->arr_raw_length = tot_len;
@@ -352,4 +375,94 @@ void parse_frame(const char *buffer, struct resp_protocol_hdlr *hdlr)
             __create_empty_str(hdlr);
             break;
     }
+}
+
+static int _encode_string(char *buffer, unsigned int buf_size, struct resp_protocol_hdlr *hdlr)
+{
+    int tmp_written;
+
+    if (!hdlr->buf_arr[0].data)
+        return -1;
+
+    tmp_written = strcmp(hdlr->buf_arr[0].data, "") == 0 ? \
+                  snprintf(buffer, buf_size, "\r\n") : snprintf(buffer, buf_size, "%c%s\r\n", hdlr->type, (const char *)hdlr->buf_arr[0].data);
+
+    return tmp_written;
+}
+
+int encode_frame(char *buffer, unsigned int buf_size, struct resp_protocol_hdlr *hdlr) {
+    struct resp_protocol_hdlr *tmp_hdlr;
+    int subresult;
+
+    if (!buffer || !hdlr || !buf_size || !hdlr->buf_arr) {
+        return -1;
+    }
+
+    size_t offset = 0;
+    int written = 0;
+
+    switch (hdlr->type) {
+        case '+':
+        case '-':
+            written = _encode_string(buffer, buf_size, hdlr);
+            break;
+
+        case ':':
+            if (hdlr->buf_arr[0].data) {
+                int value = *(int *)hdlr->buf_arr[0].data;
+                written = snprintf(buffer, buf_size, ":%d\r\n", value);
+            } else {
+                return -1;
+            }
+            break;
+
+        case '$':
+            if (hdlr->buf_arr[0].length < 0) {
+                written = snprintf(buffer, buf_size, "$-1\r\n");
+            } else {
+                written = snprintf(buffer, buf_size, "$%d\r\n%s\r\n", 
+                                   hdlr->buf_arr[0].length, (const char *)hdlr->buf_arr[0].data);
+            }
+            break;
+
+        case '*':
+            if (hdlr->arr_size < 0) {
+                written = snprintf(buffer, buf_size, "*-1\r\n");
+            } else {
+                written = snprintf(buffer, buf_size, "*%d\r\n", hdlr->arr_size);
+                offset += written;
+
+                for (int i = 0; i < hdlr->arr_size; i++) {
+                    if (hdlr->buf_arr[i].type != '*') {
+                        tmp_hdlr = calloc(1, sizeof(struct resp_protocol_hdlr));
+                        tmp_hdlr->type = hdlr->buf_arr[i].type;
+                        tmp_hdlr->buf_arr = &hdlr->buf_arr[i];
+                        tmp_hdlr->arr_size = hdlr->buf_arr[i].length;
+                        tmp_hdlr->arr_raw_length = hdlr->buf_arr[i].raw_length;
+                        subresult = encode_frame(buffer + offset, buf_size - offset, tmp_hdlr);
+                        free(tmp_hdlr);
+                    } else {
+                        tmp_hdlr = (struct resp_protocol_hdlr *)hdlr->buf_arr[i].data;
+                        tmp_hdlr->type = hdlr->buf_arr[i].type;
+                        tmp_hdlr->arr_size = hdlr->buf_arr[i].length;
+                        tmp_hdlr->arr_raw_length = hdlr->buf_arr[i].raw_length;
+                        subresult = encode_frame(buffer + offset, buf_size - offset, tmp_hdlr);
+                    }
+
+                    if (subresult < 0) {
+                        return -1;
+                    }
+
+                    offset += subresult;
+                }
+
+                written = offset;
+            }
+            break;
+
+        default:
+            return -1;
+    }
+
+    return (written < 0 || (size_t)written >= buf_size) ? -1 : written;
 }
